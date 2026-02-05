@@ -55,7 +55,9 @@ public:
     bool isConnected() const { return rosConnected; }
     
 private:
-    ros::NodeHandle nh;
+    // NodeHandle with larger buffers for STM32 USB CDC
+    // NodeHandle_<Hardware, MaxSubscribers, MaxPublishers, InputSize, OutputSize>
+    ros::NodeHandle_<ArduinoHardware, 25, 25, 1024, 1024> nh;
     
     // Publishers
     ros::Publisher brakeStatePub;
