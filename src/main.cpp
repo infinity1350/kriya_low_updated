@@ -5,26 +5,17 @@
 
 #include <Arduino.h>
 
-// ============================================================================
-// CRITICAL: Define buffer sizes BEFORE including ros.h
-// ============================================================================
-#ifndef INPUT_SIZE
-  #define INPUT_SIZE 1024
-#endif
-
-#ifndef OUTPUT_SIZE
-  #define OUTPUT_SIZE 1024
-#endif
-
-// Now include ROS headers
+// Include ROS headers
 #include <ros.h>
 #include <std_msgs/String.h>
 #include <std_msgs/Int32.h>
 
 // ============================================================================
-// ROS Setup
+// ROS Setup with Custom Buffer Sizes
 // ============================================================================
-ros::NodeHandle nh;
+// NodeHandle_<Hardware, MaxSubscribers, MaxPublishers, InputSize, OutputSize>
+// Default is 512 bytes for input/output - we increase to 1024 for STM32 USB CDC
+ros::NodeHandle_<ArduinoHardware, 25, 25, 1024, 1024> nh;
 
 // Publisher for hello world message
 std_msgs::String hello_msg;
