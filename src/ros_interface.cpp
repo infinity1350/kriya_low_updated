@@ -50,35 +50,44 @@ ROSInterface::ROSInterface() :
 // ============================================================================
 
 void ROSInterface::begin() {
+    // Small delay to ensure USB CDC is fully enumerated
+    delay(500);
+
     // Initialize ROS node handle
     nh.initNode();
-    
+
+    // Small delay after node initialization
+    delay(100);
+
     // Advertise publishers
     nh.advertise(brakeStatePub);
     nh.advertise(actionButtonPub);
     nh.advertise(trolleyHitchPub);
     nh.advertise(batteryStatusPub);
     nh.advertise(safetyStatusPub);
-    
+
     // Subscribe to topics
     nh.subscribe(robotStatusSub);
     nh.subscribe(buttonLedSub);
-    
+
     // Setup battery message array
     batteryMsg.data_length = BAT_STATUS_SIZE;
     batteryMsg.data = batteryData;
-    
-    // Wait for connection
+
+    // Wait for connection with longer timeout
     unsigned long startTime = millis();
-    while (!nh.connected() && (millis() - startTime < 3000)) {
+    while (!nh.connected() && (millis() - startTime < 5000)) {
         nh.spinOnce();
-        delay(10);
+        delay(50);
     }
-    
+
     rosConnected = nh.connected();
-    
+
     if (rosConnected) {
         nh.loginfo("STM32 BMS System connected to ROS");
+    } else {
+        // Connection failed - will retry during update() calls
+        // This is normal if rosserial host is not running yet
     }
 }
 

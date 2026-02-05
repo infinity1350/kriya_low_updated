@@ -78,10 +78,13 @@ void disableChargingMosfets();
 // Setup Function
 // ============================================================================
 void setup() {
+    // IMPORTANT: Always initialize Serial for USB CDC
+    // - In DEBUG_MODE: Used for debug output
+    // - In ROS MODE: Used by rosserial for communication
+    Serial.begin(115200);
+    delay(100);
+
     #if DEBUG_MODE
-        // Initialize serial for debugging
-        Serial.begin(115200);
-        delay(100);
         Serial.println("\n\n========================================");
         Serial.println("[BOOT] KRIYA BMS Starting (DEBUG MODE)");
         Serial.println("========================================");
