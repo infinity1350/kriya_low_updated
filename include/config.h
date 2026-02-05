@@ -24,7 +24,7 @@
 // When DEBUG_MODE = 1:
 //   - ROS is DISABLED, debug prints are enabled
 //   - Serial is used for debug output (open Serial Monitor at 115200 baud)
-#define DEBUG_MODE          1
+#define DEBUG_MODE          0
 
 #if DEBUG_MODE
     #define DEBUG_PRINT(x)      Serial.print(x)
