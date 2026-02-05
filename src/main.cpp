@@ -37,7 +37,8 @@ void setup() {
   Serial.begin(115200);
 
   // CRITICAL: Wait for USB CDC to enumerate on STM32
-  delay(1000);
+  // Longer delay ensures host-side driver is ready too
+  delay(2000);
 
   // Initialize ROS node
   nh.initNode();
@@ -49,38 +50,42 @@ void setup() {
   nh.advertise(hello_pub);
   nh.advertise(counter_pub);
 
-  // Wait for connection
-  unsigned long startTime = millis();
-  while (!nh.connected() && (millis() - startTime < 5000)) {
-    nh.spinOnce();
-    delay(50);
-  }
-
-  if (nh.connected()) {
-    nh.loginfo("STM32 ROS Test - Connected!");
-  }
+  // Don't try to connect here - let loop() handle it
+  // The host might not be running rosserial yet
 }
 
 // ============================================================================
 // Main Loop
 // ============================================================================
 void loop() {
-  // Create hello message
-  snprintf(hello_buffer, sizeof(hello_buffer), "Hello from STM32! Count: %d", counter);
-  hello_msg.data = hello_buffer;
-
-  // Publish messages
-  hello_pub.publish(&hello_msg);
-
-  counter_msg.data = counter;
-  counter_pub.publish(&counter_msg);
-
-  // Increment counter
-  counter++;
-
-  // CRITICAL: Must call spinOnce to handle ROS communication
+  // CRITICAL: Call spinOnce() frequently to handle ROS communication
+  // MUST be called more frequently than SERIAL_MSG_TIMEOUT (20ms)
   nh.spinOnce();
 
-  // Publish every 500ms (2 Hz)
-  delay(500);
+  // Only publish when connected to avoid junk data during sync
+  if (nh.connected()) {
+    static unsigned long lastPublish = 0;
+    unsigned long now = millis();
+
+    // Publish every 500ms (2 Hz)
+    if (now - lastPublish >= 500) {
+      lastPublish = now;
+
+      // Create and publish hello message
+      snprintf(hello_buffer, sizeof(hello_buffer), "Hello from STM32! Count: %d", counter);
+      hello_msg.data = hello_buffer;
+      hello_pub.publish(&hello_msg);
+
+      // Publish counter
+      counter_msg.data = counter;
+      counter_pub.publish(&counter_msg);
+
+      // Increment counter
+      counter++;
+    }
+  }
+
+  // Short delay - spinOnce() is called every 10ms (100Hz)
+  // This is MUCH faster than the 20ms SERIAL_MSG_TIMEOUT
+  delay(10);
 }
