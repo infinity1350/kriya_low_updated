@@ -82,16 +82,16 @@ void setup() {
     // - In DEBUG_MODE: Used for debug output
     // - In ROS MODE: Used by rosserial for communication
     Serial.begin(115200);
-    delay(100);
+
+    // Critical delay for USB CDC enumeration on STM32
+    // Without this, rosserial sync can fail
+    delay(1000);
 
     #if DEBUG_MODE
         Serial.println("\n\n========================================");
         Serial.println("[BOOT] KRIYA BMS Starting (DEBUG MODE)");
         Serial.println("========================================");
     #endif
-    
-    // Small delay for stability
-    delay(500);
     DEBUG_PRINTLN("[SETUP] Initial delay complete");
     
     // Setup hardware pins first

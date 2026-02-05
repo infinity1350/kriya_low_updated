@@ -7,6 +7,18 @@
 #define ROS_INTERFACE_H
 
 #include <Arduino.h>
+
+// Configure rosserial buffer sizes for STM32 BEFORE including ros.h
+// Default is 512 bytes which can cause sync issues on STM32 USB CDC
+// Increase to 1024 bytes for better reliability
+#ifndef INPUT_SIZE
+  #define INPUT_SIZE 1024
+#endif
+
+#ifndef OUTPUT_SIZE
+  #define OUTPUT_SIZE 1024
+#endif
+
 #include <ros.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/String.h>
