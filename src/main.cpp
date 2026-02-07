@@ -64,6 +64,13 @@ unsigned long lastHeartbeat = 0;
 bool systemInitialized = false;
 bool previousEmergencyState = false;
 
+// Serial print state tracking
+bool lastBrakePrintState = false;
+bool lastActionPrintState = false;
+bool lastTrolleyPrintState = false;
+unsigned long lastBatteryPrint = 0;
+unsigned long lastSafetyPrint = 0;
+
 // ============================================================================
 // Function Prototypes
 // ============================================================================
@@ -78,17 +85,20 @@ void disableChargingMosfets();
 // Setup Function
 // ============================================================================
 void setup() {
+    // IMPORTANT: Always initialize Serial for USB CDC
+    // - In DEBUG_MODE: Used for debug output
+    // - In ROS MODE: Used by rosserial for communication
+    Serial.begin(115200);
+
+    // Critical delay for USB CDC enumeration on STM32
+    // Without this, rosserial sync can fail
+    delay(1000);
+
     #if DEBUG_MODE
-        // Initialize serial for debugging
-        Serial.begin(115200);
-        delay(100);
         Serial.println("\n\n========================================");
         Serial.println("[BOOT] KRIYA BMS Starting (DEBUG MODE)");
         Serial.println("========================================");
     #endif
-    
-    // Small delay for stability
-    delay(500);
     DEBUG_PRINTLN("[SETUP] Initial delay complete");
     
     // Setup hardware pins first
@@ -171,15 +181,77 @@ void loop() {
     }
     
     // =========================================================================
-    // PRIORITY 3: ROS Communication (100Hz) - Only when not in debug mode
+    // PRIORITY 3: Serial Communication (100Hz)
     // =========================================================================
-    #if !DEBUG_MODE
     if (now - lastROS >= ROS_SPIN_INTERVAL_MS) {
         lastROS = now;
         rosInterface.update();
     }
-    #endif
-    
+
+    // =========================================================================
+    // Serial Print Data (10Hz for battery/safety, on-change for buttons)
+    // =========================================================================
+    // Print button states on change
+    bool currentBrake = safetyMonitor.isButton1Pressed();
+    if (currentBrake != lastBrakePrintState) {
+        Serial.print("BRAKE:");
+        Serial.println(currentBrake ? 1 : 0);
+        lastBrakePrintState = currentBrake;
+    }
+
+    bool currentAction = safetyMonitor.isButton2Pressed();
+    if (currentAction != lastActionPrintState) {
+        Serial.print("ACTION:");
+        Serial.println(currentAction ? 1 : 0);
+        lastActionPrintState = currentAction;
+    }
+
+    bool currentTrolley = safetyMonitor.isButton3Pressed();
+    if (currentTrolley != lastTrolleyPrintState) {
+        Serial.print("TROLLEY:");
+        Serial.println(currentTrolley ? 1 : 0);
+        lastTrolleyPrintState = currentTrolley;
+    }
+
+    // Print battery status at 10Hz (100ms)
+    if (now - lastBatteryPrint >= 100) {
+        lastBatteryPrint = now;
+
+        BMSData data1 = bms1.getData();
+        BMSData data2 = bms2.getData();
+
+        Serial.print("BATTERY:");
+        // Battery 1
+        Serial.print(data1.totalVoltage, 2); Serial.print(",");
+        Serial.print(data1.current, 2); Serial.print(",");
+        Serial.print(data1.socPercent); Serial.print(",");
+        Serial.print(data1.temp1, 1); Serial.print(",");
+        Serial.print(data1.temp2, 1); Serial.print(",");
+        Serial.print(batteryManager.getBattery1State()); Serial.print(",");
+        // Battery 2
+        Serial.print(data2.totalVoltage, 2); Serial.print(",");
+        Serial.print(data2.current, 2); Serial.print(",");
+        Serial.print(data2.socPercent); Serial.print(",");
+        Serial.print(data2.temp1, 1); Serial.print(",");
+        Serial.print(data2.temp2, 1); Serial.print(",");
+        Serial.print(batteryManager.getBattery2State()); Serial.print(",");
+        // System state
+        Serial.print(batteryManager.getActiveBattery()); Serial.print(",");
+        Serial.println(batteryManager.getSystemState());
+    }
+
+    // Print safety status at 10Hz (100ms)
+    if (now - lastSafetyPrint >= 100) {
+        lastSafetyPrint = now;
+
+        Serial.print("SAFETY:");
+        Serial.print(safetyMonitor.isEStopPressed() ? 1 : 0); Serial.print(",");
+        Serial.print(safetyMonitor.isButton1Pressed() ? 1 : 0); Serial.print(",");
+        Serial.print(safetyMonitor.isButton2Pressed() ? 1 : 0); Serial.print(",");
+        Serial.print(safetyMonitor.isButton3Pressed() ? 1 : 0); Serial.print(",");
+        Serial.println((int)safetyMonitor.getCurrentAlertLevel());
+    }
+
     // =========================================================================
     // BMS Communication - every 2 seconds
     // =========================================================================
@@ -295,13 +367,11 @@ void setupPeripherals() {
     DEBUG_PRINTLN("  [PERIPH] powerManager.begin()...");
     powerManager.begin();
     DEBUG_PRINTLN("  [PERIPH] Power manager OK");
-    
-    // ROS interface - only initialize when not in debug mode
-    #if !DEBUG_MODE
-        rosInterface.begin();
-    #else
-        DEBUG_PRINTLN("  [PERIPH] ROS interface SKIPPED (debug mode)");
-    #endif
+
+    // Serial interface - always initialize
+    DEBUG_PRINTLN("  [PERIPH] Serial interface starting...");
+    rosInterface.begin();
+    DEBUG_PRINTLN("  [PERIPH] Serial interface OK");
 }
 
 // ============================================================================
