@@ -63,8 +63,6 @@ unsigned long lastHeartbeat = 0;
 // ============================================================================
 bool systemInitialized = false;
 bool previousEmergencyState = false;
-
-// Serial print state tracking
 bool lastBrakePrintState = false;
 bool lastActionPrintState = false;
 bool lastTrolleyPrintState = false;
@@ -85,20 +83,17 @@ void disableChargingMosfets();
 // Setup Function
 // ============================================================================
 void setup() {
-    // IMPORTANT: Always initialize Serial for USB CDC
-    // - In DEBUG_MODE: Used for debug output
-    // - In ROS MODE: Used by rosserial for communication
-    Serial.begin(115200);
-
-    // Critical delay for USB CDC enumeration on STM32
-    // Without this, rosserial sync can fail
-    delay(1000);
-
     #if DEBUG_MODE
+        // Initialize serial for debugging
+        Serial.begin(115200);
+        delay(100);
         Serial.println("\n\n========================================");
         Serial.println("[BOOT] KRIYA BMS Starting (DEBUG MODE)");
         Serial.println("========================================");
     #endif
+    
+    // Small delay for stability
+    delay(500);
     DEBUG_PRINTLN("[SETUP] Initial delay complete");
     
     // Setup hardware pins first
@@ -181,14 +176,17 @@ void loop() {
     }
     
     // =========================================================================
-    // PRIORITY 3: Serial Communication (100Hz)
+    // PRIORITY 3: ROS Communication (100Hz) - Only when not in debug mode
     // =========================================================================
+    #if !DEBUG_MODE
     if (now - lastROS >= ROS_SPIN_INTERVAL_MS) {
         lastROS = now;
         rosInterface.update();
     }
+    #endif
 
-    // =========================================================================
+
+        // =========================================================================
     // Serial Print Data (10Hz for battery/safety, on-change for buttons)
     // =========================================================================
     // Print button states on change
@@ -251,7 +249,7 @@ void loop() {
         Serial.print(safetyMonitor.isButton3Pressed() ? 1 : 0); Serial.print(",");
         Serial.println((int)safetyMonitor.getCurrentAlertLevel());
     }
-
+    
     // =========================================================================
     // BMS Communication - every 2 seconds
     // =========================================================================
@@ -259,18 +257,14 @@ void loop() {
         lastBMS = now;
         digitalWrite(ONBOARD_LED_PIN, HIGH);
         
-        DEBUG_PRINTLN("[BMS] Reading BMS1...");
+        // Read BMS1 using delay-based approach (works reliably)
         readBMSDirect(BMS_Serial1, bms1);
-        DEBUG_PRINTLN("[BMS] BMS1 done");
         
-        DEBUG_PRINTLN("[BMS] Reading BMS2...");
+        // Read BMS2
         readBMSDirect(BMS_Serial2, bms2);
-        DEBUG_PRINTLN("[BMS] BMS2 done");
         
         digitalWrite(ONBOARD_LED_PIN, LOW);
     }
-
-
     
     // =========================================================================
     // Battery Management Logic (20Hz) - Only when system is ready
@@ -371,11 +365,13 @@ void setupPeripherals() {
     DEBUG_PRINTLN("  [PERIPH] powerManager.begin()...");
     powerManager.begin();
     DEBUG_PRINTLN("  [PERIPH] Power manager OK");
-
-    // Serial interface - always initialize
-    DEBUG_PRINTLN("  [PERIPH] Serial interface starting...");
-    rosInterface.begin();
-    DEBUG_PRINTLN("  [PERIPH] Serial interface OK");
+    
+    // ROS interface - only initialize when not in debug mode
+    #if !DEBUG_MODE
+        rosInterface.begin();
+    #else
+        DEBUG_PRINTLN("  [PERIPH] ROS interface SKIPPED (debug mode)");
+    #endif
 }
 
 // ============================================================================
@@ -440,44 +436,28 @@ void handleButtons() {
 // Direct BMS Read (Delay-based, works reliably)
 // ============================================================================
 void readBMSDirect(HardwareSerial& serial, BMSManager& bms) {
-    // Flush any pending data with timeout
-    unsigned long flushStart = millis();
-    for (int i = 0; i < 256 && serial.available() && (millis() - flushStart < 50); i++) {
+    // Flush any pending data
+    for (int i = 0; i < 256 && serial.available(); i++) {
         serial.read();
     }
-
-
+    
     // Build and send JBD BMS frame for basic info (cmd 0x03)
     uint8_t frame[7] = {0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77};
     serial.write(frame, 7);
-
+    
     // Wait for response (delay-based is more reliable than millis loop)
-    delay(100);
-
-    // Read response with timeout protection
+    delay(200);
+    
+    // Read response
     uint8_t buffer[64];
     uint8_t idx = 0;
-    unsigned long startTime = millis();
-    const unsigned long TIMEOUT_MS = 100;  // 100ms timeout
-
-    // Read available bytes with timeout and iteration limit
-    while (idx < 64 && (millis() - startTime < TIMEOUT_MS)) {
-        if (serial.available()) {
-            buffer[idx++] = serial.read();
-        }
+    while (serial.available() && idx < 64) {
+        buffer[idx++] = serial.read();
     }
-
+    
     // Update BMS data if we got a valid response
-    DEBUG_PRINT("[BMS] Received ");
-    DEBUG_PRINT(idx);
-    DEBUG_PRINTLN(" bytes");
-
     if (idx >= 30) {
-        DEBUG_PRINTLN("[BMS] Updating buffer...");
         bms.updateFromBuffer(buffer, idx);
-        DEBUG_PRINTLN("[BMS] Buffer updated");
-    } else {
-        DEBUG_PRINTLN("[BMS] Not enough data");
     }
 }
 
