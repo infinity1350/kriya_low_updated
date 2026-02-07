@@ -13,8 +13,9 @@
 // ============================================================================
 // DEBUG CONFIGURATION
 // ============================================================================
-// Set to 1 for debug mode (Serial monitor), 0 for ROS mode (rosserial over USB)
-#define DEBUG_MODE          0
+// Set to 1 for Serial.print() interface, 0 for rosserial (not used anymore)
+// KEEP AT 1 - we now use simple Serial.print() instead of rosserial
+#define DEBUG_MODE          1
 
 #if DEBUG_MODE
     #define DEBUG_PRINT(x)      Serial.print(x)

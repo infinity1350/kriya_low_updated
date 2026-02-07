@@ -1,6 +1,7 @@
 /**
  * @file ros_interface.cpp
- * @brief ROS serial interface implementation
+ * @brief Serial interface implementation (no ROS dependencies)
+ * Uses simple Serial.print() for data transmission
  */
 
 #include "ros_interface.h"
@@ -12,37 +13,20 @@ extern BatteryManager batteryManager;
 extern SafetyMonitor safetyMonitor;
 extern DisplayManager display;
 
-// Static instance pointer for callbacks
-static ROSInterface* rosInstance = nullptr;
-
 // ============================================================================
 // Constructor
 // ============================================================================
 
-ROSInterface::ROSInterface() :
-    brakeStatePub("/brake_state", &brakeMsg),
-    actionButtonPub("/action_button", &actionMsg),
-    trolleyHitchPub("/trolley_hitch", &trolleyMsg),
-    batteryStatusPub("/battery_status", &batteryMsg),
-    safetyStatusPub("/safety_status", &safetyMsg),
-    robotStatusSub("/robot_status", &ROSInterface::robotStatusCallback),
-    buttonLedSub("/button_leds", &ROSInterface::buttonLedCallback)
-{
+ROSInterface::ROSInterface() {
     lastBatteryPublish = 0;
     lastSafetyPublish = 0;
-    lastSpinTime = 0;
-    
+
     lastBrakeState = false;
     lastActionState = false;
     lastTrolleyState = false;
-    
-    rosConnected = false;
-    lastConnectionCheck = 0;
-    
-    memset(batteryData, 0, sizeof(batteryData));
-    memset(safetyBuffer, 0, sizeof(safetyBuffer));
-    
-    rosInstance = this;
+
+    inputIndex = 0;
+    memset(inputBuffer, 0, sizeof(inputBuffer));
 }
 
 // ============================================================================
@@ -50,45 +34,18 @@ ROSInterface::ROSInterface() :
 // ============================================================================
 
 void ROSInterface::begin() {
-    // Small delay to ensure USB CDC is fully enumerated
-    delay(500);
-
-    // Initialize ROS node handle
-    nh.initNode();
-
-    // Small delay after node initialization
-    delay(100);
-
-    // Advertise publishers
-    nh.advertise(brakeStatePub);
-    nh.advertise(actionButtonPub);
-    nh.advertise(trolleyHitchPub);
-    nh.advertise(batteryStatusPub);
-    nh.advertise(safetyStatusPub);
-
-    // Subscribe to topics
-    nh.subscribe(robotStatusSub);
-    nh.subscribe(buttonLedSub);
-
-    // Setup battery message array
-    batteryMsg.data_length = BAT_STATUS_SIZE;
-    batteryMsg.data = batteryData;
-
-    // Wait for connection with longer timeout
-    unsigned long startTime = millis();
-    while (!nh.connected() && (millis() - startTime < 5000)) {
-        nh.spinOnce();
-        delay(50);
-    }
-
-    rosConnected = nh.connected();
-
-    if (rosConnected) {
-        nh.loginfo("STM32 BMS System connected to ROS");
-    } else {
-        // Connection failed - will retry during update() calls
-        // This is normal if rosserial host is not running yet
-    }
+    // Serial already initialized in main.cpp
+    // Just print a startup message
+    Serial.println("\n========================================");
+    Serial.println("STM32 BMS Serial Interface Started");
+    Serial.println("========================================");
+    Serial.println("Data format:");
+    Serial.println("  BRAKE:<0|1>");
+    Serial.println("  ACTION:<0|1>");
+    Serial.println("  TROLLEY:<0|1>");
+    Serial.println("  BATTERY:V1,I1,SOC1,T1a,T1b,S1,V2,I2,SOC2,T2a,T2b,S2,ACTIVE,STATE");
+    Serial.println("  SAFETY:ESTOP,B1,B2,B3,ALERT");
+    Serial.println("========================================\n");
 }
 
 // ============================================================================
@@ -97,35 +54,29 @@ void ROSInterface::begin() {
 
 void ROSInterface::update() {
     unsigned long now = millis();
-    
-    // Spin ROS
+
+    // Process incoming serial commands
     spinOnce();
-    
+
     // Check for button state changes
     checkButtonChanges();
-    
+
     // Publish battery status at configured rate
-    if (now - lastBatteryPublish >= ROS_BATTERY_PUBLISH_MS) {
+    if (now - lastBatteryPublish >= SERIAL_BATTERY_PUBLISH_MS) {
         lastBatteryPublish = now;
         publishBatteryStatus();
     }
-    
+
     // Publish safety status at configured rate
-    if (now - lastSafetyPublish >= ROS_SAFETY_PUBLISH_MS) {
+    if (now - lastSafetyPublish >= SERIAL_SAFETY_PUBLISH_MS) {
         lastSafetyPublish = now;
         publishSafetyStatus();
-    }
-    
-    // Update connection status periodically
-    if (now - lastConnectionCheck >= 1000) {
-        lastConnectionCheck = now;
-        rosConnected = nh.connected();
-        display.setRobotConnected(rosConnected);
     }
 }
 
 void ROSInterface::spinOnce() {
-    nh.spinOnce();
+    // Read incoming serial data
+    processSerialInput();
 }
 
 // ============================================================================
@@ -139,14 +90,14 @@ void ROSInterface::checkButtonChanges() {
         publishBrakeState(currentBrake);
         lastBrakeState = currentBrake;
     }
-    
+
     // Button 2 - Action
     bool currentAction = safetyMonitor.isButton2Pressed();
     if (currentAction != lastActionState) {
         publishActionButton(currentAction);
         lastActionState = currentAction;
     }
-    
+
     // Button 3 - Trolley Hitch
     bool currentTrolley = safetyMonitor.isButton3Pressed();
     if (currentTrolley != lastTrolleyState) {
@@ -156,132 +107,124 @@ void ROSInterface::checkButtonChanges() {
 }
 
 // ============================================================================
-// Publishers
+// Publishers (Serial.print based)
 // ============================================================================
 
 void ROSInterface::publishBrakeState(bool state) {
-    brakeMsg.data = state;
-    brakeStatePub.publish(&brakeMsg);
+    Serial.print("BRAKE:");
+    Serial.println(state ? 1 : 0);
 }
 
 void ROSInterface::publishActionButton(bool state) {
-    actionMsg.data = state;
-    actionButtonPub.publish(&actionMsg);
+    Serial.print("ACTION:");
+    Serial.println(state ? 1 : 0);
 }
 
 void ROSInterface::publishTrolleyHitch(bool state) {
-    trolleyMsg.data = state;
-    trolleyHitchPub.publish(&trolleyMsg);
+    Serial.print("TROLLEY:");
+    Serial.println(state ? 1 : 0);
 }
 
 void ROSInterface::publishBatteryStatus() {
     BMSData data1 = bms1.getData();
     BMSData data2 = bms2.getData();
-    
+
+    // Format: BATTERY:V1,I1,SOC1,T1a,T1b,S1,V2,I2,SOC2,T2a,T2b,S2,ACTIVE,STATE
+    Serial.print("BATTERY:");
+
     // Battery 1 data
-    batteryData[0] = data1.totalVoltage;
-    batteryData[1] = data1.current;
-    batteryData[2] = (float)data1.socPercent;
-    batteryData[3] = data1.temp1;
-    batteryData[4] = data1.temp2;
-    batteryData[5] = (float)batteryManager.getBattery1State();
-    
+    Serial.print(data1.totalVoltage, 2);        Serial.print(",");
+    Serial.print(data1.current, 2);             Serial.print(",");
+    Serial.print(data1.socPercent);             Serial.print(",");
+    Serial.print(data1.temp1, 1);               Serial.print(",");
+    Serial.print(data1.temp2, 1);               Serial.print(",");
+    Serial.print(batteryManager.getBattery1State()); Serial.print(",");
+
     // Battery 2 data
-    batteryData[6] = data2.totalVoltage;
-    batteryData[7] = data2.current;
-    batteryData[8] = (float)data2.socPercent;
-    batteryData[9] = data2.temp1;
-    batteryData[10] = data2.temp2;
-    batteryData[11] = (float)batteryManager.getBattery2State();
-    
+    Serial.print(data2.totalVoltage, 2);        Serial.print(",");
+    Serial.print(data2.current, 2);             Serial.print(",");
+    Serial.print(data2.socPercent);             Serial.print(",");
+    Serial.print(data2.temp1, 1);               Serial.print(",");
+    Serial.print(data2.temp2, 1);               Serial.print(",");
+    Serial.print(batteryManager.getBattery2State()); Serial.print(",");
+
     // System state
-    batteryData[12] = (float)batteryManager.getActiveBattery();
-    batteryData[13] = (float)batteryManager.getSystemState();
-    
-    batteryStatusPub.publish(&batteryMsg);
+    Serial.print(batteryManager.getActiveBattery()); Serial.print(",");
+    Serial.println(batteryManager.getSystemState());
 }
 
 void ROSInterface::publishSafetyStatus() {
-    // Build safety status string
-    // Format: "ESTOP:0,B1:0,B2:0,B3:0,ALERT:0"
-    // B1=Brake, B2=Action, B3=Trolley
-    sprintf(safetyBuffer, "ESTOP:%d,B1:%d,B2:%d,B3:%d,ALERT:%d",
-            safetyMonitor.isEStopPressed() ? 1 : 0,
-            safetyMonitor.isButton1Pressed() ? 1 : 0,
-            safetyMonitor.isButton2Pressed() ? 1 : 0,
-            safetyMonitor.isButton3Pressed() ? 1 : 0,
-            (int)safetyMonitor.getCurrentAlertLevel());
-    
-    safetyMsg.data = safetyBuffer;
-    safetyStatusPub.publish(&safetyMsg);
+    // Format: SAFETY:ESTOP,B1,B2,B3,ALERT
+    Serial.print("SAFETY:");
+    Serial.print(safetyMonitor.isEStopPressed() ? 1 : 0);      Serial.print(",");
+    Serial.print(safetyMonitor.isButton1Pressed() ? 1 : 0);    Serial.print(",");
+    Serial.print(safetyMonitor.isButton2Pressed() ? 1 : 0);    Serial.print(",");
+    Serial.print(safetyMonitor.isButton3Pressed() ? 1 : 0);    Serial.print(",");
+    Serial.println((int)safetyMonitor.getCurrentAlertLevel());
 }
 
 // ============================================================================
-// Subscriber Callbacks
+// Serial Input Processing
 // ============================================================================
 
-void ROSInterface::robotStatusCallback(const std_msgs::String& msg) {
-    // Parse robot status message
-    // Expected format: "MODE:NAVIGATING,WP:Waypoint_1,ERR:"
-    
-    if (rosInstance == nullptr) return;
-    
-    const char* data = msg.data;
-    
-    char mode[32] = "UNKNOWN";
-    char waypoint[32] = "--";
-    char error[64] = "";
-    
-    // Simple parsing
-    const char* modePtr = strstr(data, "MODE:");
-    if (modePtr != nullptr) {
-        modePtr += 5;
-        const char* endPtr = strchr(modePtr, ',');
-        if (endPtr != nullptr) {
-            size_t len = endPtr - modePtr;
-            if (len < sizeof(mode)) {
-                strncpy(mode, modePtr, len);
-                mode[len] = '\0';
+void ROSInterface::processSerialInput() {
+    while (Serial.available() > 0) {
+        char c = Serial.read();
+
+        // End of line - process command
+        if (c == '\n' || c == '\r') {
+            if (inputIndex > 0) {
+                inputBuffer[inputIndex] = '\0';
+
+                // Parse command
+                // Expected formats:
+                //   ROBOT:MODE,WAYPOINT,ERROR
+                //   LED:bitmask (0-7, bits control button LEDs)
+
+                if (strncmp(inputBuffer, "ROBOT:", 6) == 0) {
+                    // Parse robot status: ROBOT:NAVIGATING,Waypoint_1,
+                    char* data = inputBuffer + 6;
+
+                    char mode[32] = "UNKNOWN";
+                    char waypoint[32] = "--";
+                    char error[64] = "";
+
+                    // Parse comma-separated values
+                    char* token = strtok(data, ",");
+                    if (token != nullptr) {
+                        strncpy(mode, token, sizeof(mode) - 1);
+                    }
+
+                    token = strtok(nullptr, ",");
+                    if (token != nullptr) {
+                        strncpy(waypoint, token, sizeof(waypoint) - 1);
+                    }
+
+                    token = strtok(nullptr, ",");
+                    if (token != nullptr) {
+                        strncpy(error, token, sizeof(error) - 1);
+                    }
+
+                    // Update display
+                    display.updateRobotStatus(mode, waypoint, error);
+
+                } else if (strncmp(inputBuffer, "LED:", 4) == 0) {
+                    // Control button LEDs: LED:5 (binary 101 = button 1 and 3 on)
+                    uint8_t ledMask = atoi(inputBuffer + 4);
+
+                    safetyMonitor.setButton1LED(ledMask & 0x01);
+                    safetyMonitor.setButton2LED(ledMask & 0x02);
+                    safetyMonitor.setButton3LED(ledMask & 0x04);
+                }
+
+                // Reset buffer
+                inputIndex = 0;
+                memset(inputBuffer, 0, sizeof(inputBuffer));
             }
         }
-    }
-    
-    const char* wpPtr = strstr(data, "WP:");
-    if (wpPtr != nullptr) {
-        wpPtr += 3;
-        const char* endPtr = strchr(wpPtr, ',');
-        if (endPtr != nullptr) {
-            size_t len = endPtr - wpPtr;
-            if (len < sizeof(waypoint)) {
-                strncpy(waypoint, wpPtr, len);
-                waypoint[len] = '\0';
-            }
-        } else {
-            // WP is last field
-            strncpy(waypoint, wpPtr, sizeof(waypoint) - 1);
+        // Add character to buffer
+        else if (inputIndex < sizeof(inputBuffer) - 1) {
+            inputBuffer[inputIndex++] = c;
         }
     }
-    
-    const char* errPtr = strstr(data, "ERR:");
-    if (errPtr != nullptr) {
-        errPtr += 4;
-        strncpy(error, errPtr, sizeof(error) - 1);
-    }
-    
-    // Update display
-    display.updateRobotStatus(mode, waypoint, error);
 }
-
-void ROSInterface::buttonLedCallback(const std_msgs::UInt8& msg) {
-    // Control button LEDs via bitmask
-    // Bit 0: Button 1 LED
-    // Bit 1: Button 2 LED
-    // Bit 2: Button 3 LED
-    
-    uint8_t ledMask = msg.data;
-    
-    safetyMonitor.setButton1LED(ledMask & 0x01);
-    safetyMonitor.setButton2LED(ledMask & 0x02);
-    safetyMonitor.setButton3LED(ledMask & 0x04);
-}
-

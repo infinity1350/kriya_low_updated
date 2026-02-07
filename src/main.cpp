@@ -174,14 +174,12 @@ void loop() {
     }
     
     // =========================================================================
-    // PRIORITY 3: ROS Communication (100Hz) - Only when not in debug mode
+    // PRIORITY 3: Serial Communication (100Hz)
     // =========================================================================
-    #if !DEBUG_MODE
     if (now - lastROS >= ROS_SPIN_INTERVAL_MS) {
         lastROS = now;
         rosInterface.update();
     }
-    #endif
     
     // =========================================================================
     // BMS Communication - every 2 seconds
@@ -298,13 +296,11 @@ void setupPeripherals() {
     DEBUG_PRINTLN("  [PERIPH] powerManager.begin()...");
     powerManager.begin();
     DEBUG_PRINTLN("  [PERIPH] Power manager OK");
-    
-    // ROS interface - only initialize when not in debug mode
-    #if !DEBUG_MODE
-        rosInterface.begin();
-    #else
-        DEBUG_PRINTLN("  [PERIPH] ROS interface SKIPPED (debug mode)");
-    #endif
+
+    // Serial interface - always initialize
+    DEBUG_PRINTLN("  [PERIPH] Serial interface starting...");
+    rosInterface.begin();
+    DEBUG_PRINTLN("  [PERIPH] Serial interface OK");
 }
 
 // ============================================================================
