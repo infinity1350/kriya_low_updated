@@ -14,7 +14,18 @@
 // DEBUG CONFIGURATION
 // ============================================================================
 // Set to 1 for debug mode (Serial monitor), 0 for ROS mode (rosserial over USB)
-#define DEBUG_MODE          0
+// IMPORTANT: Set to 0 for ROS mode (rosserial over USB CDC)
+//            Set to 1 for debug mode (Serial monitor output)
+//
+// When DEBUG_MODE = 0:
+//   - ROS serial communication is enabled over USB CDC
+//   - Serial is used by rosserial (do NOT open Serial Monitor)
+//   - Run: rosserial_python serial_node.py /dev/ttyACM0 (or your port)
+//
+// When DEBUG_MODE = 1:
+//   - ROS is DISABLED, debug prints are enabled
+//   - Serial is used for debug output (open Serial Monitor at 115200 baud)
+#define DEBUG_MODE          1
 
 #if DEBUG_MODE
     #define DEBUG_PRINT(x)      Serial.print(x)
