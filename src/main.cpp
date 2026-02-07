@@ -259,14 +259,18 @@ void loop() {
         lastBMS = now;
         digitalWrite(ONBOARD_LED_PIN, HIGH);
         
-        // Read BMS1 using delay-based approach (works reliably)
+        DEBUG_PRINTLN("[BMS] Reading BMS1...");
         readBMSDirect(BMS_Serial1, bms1);
+        DEBUG_PRINTLN("[BMS] BMS1 done");
         
-        // Read BMS2
+        DEBUG_PRINTLN("[BMS] Reading BMS2...");
         readBMSDirect(BMS_Serial2, bms2);
+        DEBUG_PRINTLN("[BMS] BMS2 done");
         
         digitalWrite(ONBOARD_LED_PIN, LOW);
     }
+
+
     
     // =========================================================================
     // Battery Management Logic (20Hz) - Only when system is ready
@@ -436,17 +440,19 @@ void handleButtons() {
 // Direct BMS Read (Delay-based, works reliably)
 // ============================================================================
 void readBMSDirect(HardwareSerial& serial, BMSManager& bms) {
-    // Flush any pending data
-    for (int i = 0; i < 256 && serial.available(); i++) {
+    // Flush any pending data with timeout
+    unsigned long flushStart = millis();
+    for (int i = 0; i < 256 && serial.available() && (millis() - flushStart < 50); i++) {
         serial.read();
     }
+
 
     // Build and send JBD BMS frame for basic info (cmd 0x03)
     uint8_t frame[7] = {0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77};
     serial.write(frame, 7);
 
     // Wait for response (delay-based is more reliable than millis loop)
-    delay(200);
+    delay(100);
 
     // Read response with timeout protection
     uint8_t buffer[64];
@@ -462,8 +468,16 @@ void readBMSDirect(HardwareSerial& serial, BMSManager& bms) {
     }
 
     // Update BMS data if we got a valid response
+    DEBUG_PRINT("[BMS] Received ");
+    DEBUG_PRINT(idx);
+    DEBUG_PRINTLN(" bytes");
+
     if (idx >= 30) {
+        DEBUG_PRINTLN("[BMS] Updating buffer...");
         bms.updateFromBuffer(buffer, idx);
+        DEBUG_PRINTLN("[BMS] Buffer updated");
+    } else {
+        DEBUG_PRINTLN("[BMS] Not enough data");
     }
 }
 
