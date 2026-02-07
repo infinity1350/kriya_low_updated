@@ -440,21 +440,27 @@ void readBMSDirect(HardwareSerial& serial, BMSManager& bms) {
     for (int i = 0; i < 256 && serial.available(); i++) {
         serial.read();
     }
-    
+
     // Build and send JBD BMS frame for basic info (cmd 0x03)
     uint8_t frame[7] = {0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77};
     serial.write(frame, 7);
-    
+
     // Wait for response (delay-based is more reliable than millis loop)
     delay(200);
-    
-    // Read response
+
+    // Read response with timeout protection
     uint8_t buffer[64];
     uint8_t idx = 0;
-    while (serial.available() && idx < 64) {
-        buffer[idx++] = serial.read();
+    unsigned long startTime = millis();
+    const unsigned long TIMEOUT_MS = 100;  // 100ms timeout
+
+    // Read available bytes with timeout and iteration limit
+    while (idx < 64 && (millis() - startTime < TIMEOUT_MS)) {
+        if (serial.available()) {
+            buffer[idx++] = serial.read();
+        }
     }
-    
+
     // Update BMS data if we got a valid response
     if (idx >= 30) {
         bms.updateFromBuffer(buffer, idx);
