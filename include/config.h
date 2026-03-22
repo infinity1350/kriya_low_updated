@@ -75,11 +75,11 @@
 #define BUTTON1_OUT_PIN     PB6       // LED output
 
 // Button 2 - Action (next waypoint)
-#define BUTTON2_IN_PIN      PB15      // Input
+#define BUTTON2_IN_PIN      PB14      // Input
 #define BUTTON2_OUT_PIN     PB7       // LED output
 
 // Button 3 - Trolley hitch status
-#define BUTTON3_IN_PIN      PB14      // Input
+#define BUTTON3_IN_PIN      PB15      // Input
 #define BUTTON3_OUT_PIN     PB8       // LED output
 
 // ============================================================================
