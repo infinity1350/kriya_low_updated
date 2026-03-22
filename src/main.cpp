@@ -407,11 +407,27 @@ void handleEmergencyTransitions() {
 // Button Handler
 // ============================================================================
 void handleButtons() {
-    // Button 1: Brake - LED follows button state, published to ROS
+    // Button 1: Brake - cuts power on press, boots up on release
     if (safetyMonitor.button1Changed()) {
         safetyMonitor.setButton1LED(safetyMonitor.isButton1Pressed());
+
         if (safetyMonitor.button1RisingEdge()) {
+            // Brake pressed - cut power (PRECHARGE_PIN LOW, CONTACTOR_PIN LOW)
             buzzerController.playButtonPressSound();
+            powerManager.emergencyStop();
+            DEBUG_PRINTLN("[BRAKE] Pressed - power cut (PRECHARGE LOW, CONTACTOR LOW)");
+        }
+
+        if (safetyMonitor.button1FallingEdge()) {
+            // Brake released - start boot sequence (only if E-stop is not active)
+            if (!safetyMonitor.isEStopPressed()) {
+                powerManager.reset();
+                powerManager.startPrecharge();
+                ledController.setColor(LED_ORANGE);
+                ledController.setPattern(LED_BREATHING);
+                buzzerController.stop();
+                DEBUG_PRINTLN("[BRAKE] Released - boot sequence started");
+            }
         }
     }
     
