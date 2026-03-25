@@ -251,7 +251,7 @@ bool BatteryManager::isReadyToSwitch() {
     BMSData standbyData = standbyBMS->getData();
     
     // Check if active battery is low (≤20% SOC)
-    if (activeData.socPercent > 60) {
+    if (activeData.socPercent > 20) {
         return false;
     }
     

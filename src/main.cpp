@@ -472,9 +472,11 @@ void readBMSDirect(HardwareSerial& serial, BMSManager& bms) {
         buffer[idx++] = serial.read();
     }
     
-    // Update BMS data if we got a valid response
-    if (idx >= 30) {
+    // Update BMS data if we got a response; validation happens inside updateFromBuffer
+    if (idx >= 7) {
         bms.updateFromBuffer(buffer, idx);
+    } else {
+        bms.getDataRef().dataValid = false;
     }
 }
 

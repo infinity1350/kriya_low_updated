@@ -567,18 +567,41 @@ bool BMSManager::hasProtectionActive() const {
 // ============================================================================
 
 void BMSManager::updateFromBuffer(uint8_t* buffer, uint8_t length) {
-    if (length < 30) {
+    if (length < 7) {
         data.dataValid = false;
         return;
     }
-    
+
+    // Validate frame markers and header
+    if (buffer[0] != 0xDD || buffer[length - 1] != 0x77) {
+        data.dataValid = false;
+        return;
+    }
+    if (buffer[1] != 0x03) {  // Must be basic info command echo
+        data.dataValid = false;
+        return;
+    }
+    if (buffer[2] != 0x00) {  // Status byte must be OK
+        data.dataValid = false;
+        return;
+    }
+    uint8_t dataLen = buffer[3];
+    if (length != (uint8_t)(dataLen + 7)) {  // DD + CMD + STS + LEN + DATA + CS_H + CS_L + 77
+        data.dataValid = false;
+        return;
+    }
+    if (dataLen < 23) {  // Minimum data payload for basic info
+        data.dataValid = false;
+        return;
+    }
+
     // Parse JBD BMS response (buffer starts with 0xDD header)
     // buffer[0] = 0xDD (start)
     // buffer[1] = 0x03 (cmd echo)
     // buffer[2] = 0x00 (status)
-    // buffer[3] = length
+    // buffer[3] = dataLen
     // buffer[4+] = data
-    
+
     data.totalVoltage = ((buffer[4] << 8) | buffer[5]) * 0.01f;
     data.current = ((int16_t)((buffer[6] << 8) | buffer[7])) * 0.01f;
     data.remainingCapacity = ((buffer[8] << 8) | buffer[9]) * 0.01f;

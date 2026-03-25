@@ -376,12 +376,16 @@ void DisplayManager::drawBatteryCard(uint16_t x, uint16_t y, uint8_t batNum,
     // Battery terminal (top nub)
     tft.fillRoundRect(gaugeX + 35, gaugeY - 5, 30, 6, 2, borderColor);
     
+    // Clamp SOC to valid range before rendering
+    if (soc < 0) soc = 0;
+    if (soc > 100) soc = 100;
+
     // Fill based on SOC
     uint16_t fillColor;
     if (soc > 50) fillColor = ACCENT_GREEN;
     else if (soc > 20) fillColor = ACCENT_ORANGE;
     else fillColor = ACCENT_RED;
-    
+
     // Calculate fill height
     uint16_t fillH = ((gaugeH - 8) * (uint16_t)soc) / 100;
     uint16_t fillY = gaugeY + gaugeH - 4 - fillH;
