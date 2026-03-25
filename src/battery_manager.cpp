@@ -401,11 +401,42 @@ bool BatteryManager::executeBatterySwitch() {
 // ============================================================================
 
 void BatteryManager::detectHotSwap() {
-    // Only monitor standby battery for hot-swap
     uint8_t standbyBat = getStandbyBattery();
-    
+
+    // Check active battery first — if it's removed we must switch immediately
+    HotSwapEvent activeEvent = checkHotSwapStatus(activeBattery);
+    if (activeEvent == HOTSWAP_REMOVED) {
+        Serial.print("HOT-SWAP: ACTIVE Battery ");
+        Serial.print(activeBattery);
+        Serial.println(" REMOVED - switching to standby");
+
+        // Enable standby battery discharge MOSFET so system keeps power
+        BMSManager* standbyBMS = (standbyBat == 1) ? &bms1 : &bms2;
+        standbyBMS->enableDischargeMosfet();
+
+        // Flip active/standby
+        activeBattery = standbyBat;
+        if (activeBattery == 1) {
+            battery1State = BATTERY_ACTIVE;
+            battery2State = BATTERY_REMOVED;
+        } else {
+            battery1State = BATTERY_REMOVED;
+            battery2State = BATTERY_ACTIVE;
+        }
+
+        char message[40];
+        sprintf(message, "BAT%d REMOVED - SWITCHED TO BAT%d", getStandbyBattery(), activeBattery);
+        display.drawAlertScreen(message, COLOR_YELLOW);
+
+        ledController.setPattern(LED_SINGLE_BATTERY);
+        buzzerController.playPattern(BUZZER_DOUBLE_BEEP);
+        systemState = SYSTEM_BATTERY_REMOVED;
+        return;  // Skip standby check this cycle
+    }
+
+    // Monitor standby battery for removal / reconnection
     HotSwapEvent event = checkHotSwapStatus(standbyBat);
-    
+
     if (event == HOTSWAP_REMOVED) {
         Serial.print("HOT-SWAP: Battery ");
         Serial.print(standbyBat);
@@ -524,12 +555,14 @@ HotSwapEvent BatteryManager::checkHotSwapStatus(uint8_t batteryNum) {
     bool isConnectedNow = (data.totalVoltage > 10.0f);
     bool wasConnectedBefore = *wasConnected;
     
+    float prevVoltage = *lastVoltage;  // Save before updating
+
     // Update tracking variables
     *wasConnected = isConnectedNow;
     *lastVoltage = data.totalVoltage;
-    
+
     // Detect removal: was connected (>45V), now disconnected (<10V)
-    if (wasConnectedBefore && !isConnectedNow && *lastVoltage > 45.0f) {
+    if (wasConnectedBefore && !isConnectedNow && prevVoltage > 45.0f) {
         return HOTSWAP_REMOVED;
     }
     

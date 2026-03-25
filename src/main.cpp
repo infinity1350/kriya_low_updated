@@ -476,7 +476,12 @@ void readBMSDirect(HardwareSerial& serial, BMSManager& bms) {
     if (idx >= 7) {
         bms.updateFromBuffer(buffer, idx);
     } else {
-        bms.getDataRef().dataValid = false;
+        // No response — clear key fields so isBatteryConnected() and display update correctly
+        BMSData& d = bms.getDataRef();
+        d.dataValid = false;
+        d.totalVoltage = 0.0f;
+        d.socPercent = 0;
+        d.current = 0.0f;
     }
 }
 

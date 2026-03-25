@@ -175,12 +175,19 @@ void DisplayManager::update() {
 void DisplayManager::updateAnimations() {
     BMSData data1 = bms1.getData();
     BMSData data2 = bms2.getData();
-    
-    bat1Anim.targetSOC = data1.socPercent;
-    bat1Anim.targetVoltage = data1.totalVoltage;
-    bat2Anim.targetSOC = data2.socPercent;
-    bat2Anim.targetVoltage = data2.totalVoltage;
-    
+
+    // Zero animation targets when battery is not valid — ensures display reflects disconnection
+    bat1Anim.targetSOC     = data1.dataValid ? data1.socPercent   : 0;
+    bat1Anim.targetVoltage = data1.dataValid ? data1.totalVoltage : 0.0f;
+    bat2Anim.targetSOC     = data2.dataValid ? data2.socPercent   : 0;
+    bat2Anim.targetVoltage = data2.dataValid ? data2.totalVoltage : 0.0f;
+
+    // Force card redraw immediately when dataValid changes (connected ↔ disconnected)
+    static bool lastBat1Valid = false;
+    static bool lastBat2Valid = false;
+    if (data1.dataValid != lastBat1Valid) { bat1Anim.needsUpdate = true; lastBat1Valid = data1.dataValid; }
+    if (data2.dataValid != lastBat2Valid) { bat2Anim.needsUpdate = true; lastBat2Valid = data2.dataValid; }
+
     animateBatteryLevel(bat1Anim, bat1Anim.targetSOC, bat1Anim.targetVoltage);
     animateBatteryLevel(bat2Anim, bat2Anim.targetSOC, bat2Anim.targetVoltage);
 }
