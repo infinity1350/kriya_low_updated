@@ -92,7 +92,7 @@
 // POWER CONTROL PINS
 // ============================================================================
 #define PRECHARGE_PIN       PB9       // Pre-charge circuit control
-#define CONTACTOR_PIN       PA13      // Main contactor control
+#define CONTACTOR_PIN       PA0      // Main contactor control
 
 // ============================================================================
 // STATUS LED
