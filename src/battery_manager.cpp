@@ -572,9 +572,16 @@ HotSwapEvent BatteryManager::checkHotSwapStatus(uint8_t batteryNum) {
         uint8_t activeNum = activeBattery;
         BMSManager* activeBMS = (activeNum == 1) ? &bms1 : &bms2;
         BMSData activeData = activeBMS->getData();
-        
+
+        // If the active battery is not connected (voltage < 10V), skip mismatch check.
+        // This happens when only battery 2 is connected at startup — comparing against
+        // the absent battery's 0V would incorrectly trigger a voltage mismatch alert.
+        if (activeData.totalVoltage < 10.0f) {
+            return HOTSWAP_RECONNECTED_OK;
+        }
+
         float voltageDiff = checkVoltageMatch(activeData.totalVoltage, data.totalVoltage);
-        
+
         if (voltageDiff < 5.0f) {
             return HOTSWAP_RECONNECTED_OK;
         } else {
