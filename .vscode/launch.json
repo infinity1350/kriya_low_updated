@@ -12,35 +12,35 @@
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug",
-            "executable": "C:/Users/daiso/Projects/kriya_low_updated/.pio/build/genericSTM32F407VET6/firmware.elf",
-            "projectEnvName": "genericSTM32F407VET6",
-            "toolchainBinDir": "C:/Users/daiso/.platformio/packages/toolchain-gccarmnoneeabi/bin",
+            "executable": "/home/nhr/Desktop/kriya_low_updated/.pio/build/blackpill_f411ce/firmware.elf",
+            "projectEnvName": "blackpill_f411ce",
+            "toolchainBinDir": "/home/nhr/.platformio/packages/toolchain-gccarmnoneeabi/bin",
             "internalConsoleOptions": "openOnSessionStart",
-            "svdPath": "C:/Users/daiso/.platformio/platforms/ststm32/misc/svd/STM32F40x.svd",
+            "svdPath": "/home/nhr/.platformio/platforms/ststm32/misc/svd/STM32F411xx.svd",
             "preLaunchTask": {
                 "type": "PlatformIO",
-                "task": "Pre-Debug"
+                "task": "Pre-Debug (blackpill_f411ce)"
             }
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (skip Pre-Debug)",
-            "executable": "C:/Users/daiso/Projects/kriya_low_updated/.pio/build/genericSTM32F407VET6/firmware.elf",
-            "projectEnvName": "genericSTM32F407VET6",
-            "toolchainBinDir": "C:/Users/daiso/.platformio/packages/toolchain-gccarmnoneeabi/bin",
+            "executable": "/home/nhr/Desktop/kriya_low_updated/.pio/build/blackpill_f411ce/firmware.elf",
+            "projectEnvName": "blackpill_f411ce",
+            "toolchainBinDir": "/home/nhr/.platformio/packages/toolchain-gccarmnoneeabi/bin",
             "internalConsoleOptions": "openOnSessionStart",
-            "svdPath": "C:/Users/daiso/.platformio/platforms/ststm32/misc/svd/STM32F40x.svd"
+            "svdPath": "/home/nhr/.platformio/platforms/ststm32/misc/svd/STM32F411xx.svd"
         },
         {
             "type": "platformio-debug",
             "request": "launch",
             "name": "PIO Debug (without uploading)",
-            "executable": "C:/Users/daiso/Projects/kriya_low_updated/.pio/build/genericSTM32F407VET6/firmware.elf",
-            "projectEnvName": "genericSTM32F407VET6",
-            "toolchainBinDir": "C:/Users/daiso/.platformio/packages/toolchain-gccarmnoneeabi/bin",
+            "executable": "/home/nhr/Desktop/kriya_low_updated/.pio/build/blackpill_f411ce/firmware.elf",
+            "projectEnvName": "blackpill_f411ce",
+            "toolchainBinDir": "/home/nhr/.platformio/packages/toolchain-gccarmnoneeabi/bin",
             "internalConsoleOptions": "openOnSessionStart",
-            "svdPath": "C:/Users/daiso/.platformio/platforms/ststm32/misc/svd/STM32F40x.svd",
+            "svdPath": "/home/nhr/.platformio/platforms/ststm32/misc/svd/STM32F411xx.svd",
             "loadMode": "manual"
         }
     ]
