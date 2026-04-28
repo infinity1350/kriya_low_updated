@@ -53,6 +53,10 @@ public:
     
     // Connection status
     bool isConnected() const { return rosConnected; }
+    bool isNavigating() const;
+    bool isIdle() const;
+    bool isObstacleDetected() const { return obstacleDetected; }
+    const char* getRobotMode() const { return robotMode; }
     
 private:
     // NodeHandle with larger buffers for STM32 USB CDC
@@ -94,6 +98,11 @@ private:
     // Connection tracking
     bool rosConnected;
     unsigned long lastConnectionCheck;
+
+    // Latest robot state received from ROS
+    char robotMode[32];
+    char robotError[64];
+    bool obstacleDetected;
     
     // Buffer for battery data
     float batteryData[BAT_STATUS_SIZE];
@@ -106,4 +115,3 @@ private:
 extern ROSInterface rosInterface;
 
 #endif // ROS_INTERFACE_H
-

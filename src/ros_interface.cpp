@@ -15,6 +15,40 @@ extern DisplayManager display;
 // Static instance pointer for callbacks
 static ROSInterface* rosInstance = nullptr;
 
+static bool containsTokenIgnoreCase(const char* text, const char* token) {
+    if (text == nullptr || token == nullptr) {
+        return false;
+    }
+
+    while (*text) {
+        const char* textPtr = text;
+        const char* tokenPtr = token;
+
+        while (*textPtr && *tokenPtr) {
+            char lhs = *textPtr;
+            char rhs = *tokenPtr;
+
+            if (lhs >= 'a' && lhs <= 'z') lhs -= 32;
+            if (rhs >= 'a' && rhs <= 'z') rhs -= 32;
+
+            if (lhs != rhs) {
+                break;
+            }
+
+            ++textPtr;
+            ++tokenPtr;
+        }
+
+        if (*tokenPtr == '\0') {
+            return true;
+        }
+
+        ++text;
+    }
+
+    return false;
+}
+
 // ============================================================================
 // Constructor
 // ============================================================================
@@ -38,6 +72,9 @@ ROSInterface::ROSInterface() :
     
     rosConnected = false;
     lastConnectionCheck = 0;
+    robotMode[0] = '\0';
+    robotError[0] = '\0';
+    obstacleDetected = false;
     
     memset(batteryData, 0, sizeof(batteryData));
     memset(safetyBuffer, 0, sizeof(safetyBuffer));
@@ -126,6 +163,15 @@ void ROSInterface::update() {
 
 void ROSInterface::spinOnce() {
     nh.spinOnce();
+}
+
+bool ROSInterface::isNavigating() const {
+    return containsTokenIgnoreCase(robotMode, "NAVIGATING");
+}
+
+bool ROSInterface::isIdle() const {
+    return containsTokenIgnoreCase(robotMode, "IDLE") ||
+           containsTokenIgnoreCase(robotMode, "STOPPED");
 }
 
 // ============================================================================
@@ -266,7 +312,16 @@ void ROSInterface::robotStatusCallback(const std_msgs::String& msg) {
     if (errPtr != nullptr) {
         errPtr += 4;
         strncpy(error, errPtr, sizeof(error) - 1);
+        error[sizeof(error) - 1] = '\0';
     }
+
+    strncpy(rosInstance->robotMode, mode, sizeof(rosInstance->robotMode) - 1);
+    rosInstance->robotMode[sizeof(rosInstance->robotMode) - 1] = '\0';
+    strncpy(rosInstance->robotError, error, sizeof(rosInstance->robotError) - 1);
+    rosInstance->robotError[sizeof(rosInstance->robotError) - 1] = '\0';
+    rosInstance->obstacleDetected =
+        containsTokenIgnoreCase(rosInstance->robotMode, "OBSTACLE") ||
+        containsTokenIgnoreCase(rosInstance->robotError, "OBSTACLE");
     
     // Update display
     display.updateRobotStatus(mode, waypoint, error);
@@ -284,4 +339,3 @@ void ROSInterface::buttonLedCallback(const std_msgs::UInt8& msg) {
     safetyMonitor.setButton2LED(ledMask & 0x02);
     safetyMonitor.setButton3LED(ledMask & 0x04);
 }
-

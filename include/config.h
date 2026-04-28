@@ -142,8 +142,8 @@
 #define BATTERY_LOW_VOLTAGE         44.0f   // V (for 13S pack)
 #define BATTERY_HIGH_VOLTAGE        54.6f   // V
 #define BATTERY_LOW_PERCENTAGE      20.0f   // %
-#define BATTERY_HIGH_TEMP           60.0f   // °C
-#define BATTERY_LOW_TEMP            -10.0f  // °C
+#define BATTERY_HIGH_TEMP           60.0f   // Â°C
+#define BATTERY_LOW_TEMP            -10.0f  // Â°C
 
 // ============================================================================
 // BATTERY SWITCHING PARAMETERS

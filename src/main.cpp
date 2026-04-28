@@ -76,6 +76,7 @@ void setupPins();
 void setupPeripherals();
 void handleEmergencyTransitions();
 void handleButtons();
+void updateRobotIndicators();
 void readBMSDirect(HardwareSerial& serial, BMSManager& bms);
 void disableChargingMosfets();
 
@@ -113,23 +114,25 @@ void setup() {
     #endif
     
     if (safetyMonitor.isEStopPressed()) {
-        // Emergency active at startup - stay disabled
-        DEBUG_PRINTLN("[SETUP] Emergency active - staying disabled");
-        powerManager.emergencyStop();
-        ledController.setPattern(LED_ERROR_PULSE);
-        display.drawAlertScreen("E-STOP ACTIVE", COLOR_RED);
-    } else {
-        // Normal startup - begin pre-charge sequence
-        DEBUG_PRINTLN("[SETUP] Starting pre-charge sequence...");
-        powerManager.startPrecharge();
-        DEBUG_PRINTLN("[SETUP] Pre-charge started OK");
-        
-        delay(100);  // Small delay after relay switch
-        
-        ledController.setColor(LED_ORANGE);
-        ledController.setPattern(LED_BREATHING);
-        DEBUG_PRINTLN("[SETUP] LED configured OK");
-    }
+    // Emergency active at startup - stay disabled
+    DEBUG_PRINTLN("[SETUP] Emergency active - staying disabled");
+    powerManager.emergencyStop();
+    ledController.setPattern(LED_SOLID);
+    ledController.setColor(LED_RED);
+    display.drawAlertScreen("E-STOP ACTIVE", COLOR_RED);
+} else {
+    // Normal startup - begin pre-charge sequence
+    DEBUG_PRINTLN("[SETUP] Starting pre-charge sequence...");
+    powerManager.startPrecharge();
+    DEBUG_PRINTLN("[SETUP] Pre-charge started OK");
+    
+    delay(100);  // Small delay after relay switch
+    
+    ledController.setColor(LED_ORANGE);
+    ledController.setPattern(LED_BREATHING);
+    DEBUG_PRINTLN("[SETUP] LED configured OK");
+}
+
     
     // Track initial emergency state
     previousEmergencyState = safetyMonitor.isEStopPressed();
@@ -287,17 +290,29 @@ void loop() {
     // =========================================================================
     // LED Update (30Hz)
     // =========================================================================
-    if (now - lastLED >= LED_UPDATE_INTERVAL_MS) {
-        lastLED = now;
-        if (safetyMonitor.isEStopPressed()) {
-            ledController.fill(LED_RED);
-            ledController.show();
-        } else if (powerManager.isPrecharging()) {
-            ledController.update();
-        } else if (powerManager.isReady()) {
-            ledController.update();
-        }
+    // =========================================================================
+// LED Update (30Hz)
+// =========================================================================
+if (now - lastLED >= LED_UPDATE_INTERVAL_MS) {
+    lastLED = now;
+
+    if (safetyMonitor.isEStopPressed()) {
+        ledController.setPattern(LED_SOLID);
+        ledController.setColor(LED_RED);
+        ledController.update();
+    } else if (powerManager.isPrecharging()) {
+        ledController.setColor(LED_ORANGE);
+        ledController.setPattern(LED_BREATHING);
+        ledController.update();
+    } else if (powerManager.isReady()) {
+        updateRobotIndicators();
+        ledController.update();
+    } else {
+        ledController.setPattern(LED_OFF);
+        ledController.update();
     }
+}
+
     
     // =========================================================================
     // Heartbeat (1Hz)
@@ -361,6 +376,12 @@ void setupPeripherals() {
     DEBUG_PRINTLN("  [PERIPH] safetyMonitor.begin()...");
     safetyMonitor.begin();
     DEBUG_PRINTLN("  [PERIPH] Safety monitor OK");
+
+    // TEST: force brake button light ON
+safetyMonitor.setButton1LED(true);
+delay(3000);
+safetyMonitor.setButton1LED(false);
+
     
     DEBUG_PRINTLN("  [PERIPH] powerManager.begin()...");
     powerManager.begin();
@@ -374,33 +395,68 @@ void setupPeripherals() {
     #endif
 }
 
+
 // ============================================================================
 // Emergency Transition Handler
 // ============================================================================
 void handleEmergencyTransitions() {
     bool currentEmergency = safetyMonitor.isEStopPressed();
-    
+
     // Detect emergency stop activation
     if (currentEmergency && !previousEmergencyState) {
-        // Emergency just activated
         powerManager.emergencyStop();
-        ledController.setPattern(LED_ERROR_PULSE);
+
+        // Solid red strip on emergency
+        ledController.setPattern(LED_SOLID);
+        ledController.setColor(LED_RED);
+
         buzzerController.playEStopSound();
     }
-    
+
     // Detect emergency stop release
     if (!currentEmergency && previousEmergencyState) {
-        // Emergency just released - start pre-charge sequence
         powerManager.reset();
         powerManager.startPrecharge();
-        
+
         ledController.setColor(LED_ORANGE);
         ledController.setPattern(LED_BREATHING);
+
         buzzerController.stop();
     }
-    
-    // Update state for next iteration
+
     previousEmergencyState = currentEmergency;
+}
+
+
+void updateRobotIndicators() {
+    if (rosInterface.isObstacleDetected()) {
+        ledController.setColor(LED_RED);
+        ledController.setPattern(LED_WARNING_FLASH);
+
+        if (buzzerController.getCurrentPattern() != BUZZER_WARNING) {
+            buzzerController.playWarningSound();
+        }
+        return;
+    }
+
+    if (buzzerController.getCurrentPattern() == BUZZER_WARNING) {
+        buzzerController.stop();
+    }
+
+    if (rosInterface.isNavigating()) {
+        ledController.setColor(LED_GREEN);
+        ledController.setPattern(LED_WARNING_FLASH);
+        return;
+    }
+
+    if (rosInterface.isIdle()) {
+        ledController.setColor(LED_GREEN);
+        ledController.setPattern(LED_SOLID);
+        return;
+    }
+
+    ledController.setColor(LED_GREEN);
+    ledController.setPattern(LED_SOLID);
 }
 
 // ============================================================================
@@ -454,36 +510,81 @@ void handleButtons() {
 // ============================================================================
 void readBMSDirect(HardwareSerial& serial, BMSManager& bms) {
     // Flush any pending data
-    for (int i = 0; i < 256 && serial.available(); i++) {
+    while (serial.available()) {
         serial.read();
     }
-    
-    // Build and send JBD BMS frame for basic info (cmd 0x03)
+
+    // Send JBD BMS basic info request
     uint8_t frame[7] = {0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77};
     serial.write(frame, 7);
-    
-    // Wait for response (delay-based is more reliable than millis loop)
-    delay(200);
-    
-    // Read response
-    uint8_t buffer[64];
+    serial.flush();
+
+    #if DEBUG_MODE
+    Serial.println("---- BMS REQUEST SENT ----");
+    #endif
+
+    // Collect response for a short time
+    uint8_t buffer[128];
     uint8_t idx = 0;
-    while (serial.available() && idx < 64) {
-        buffer[idx++] = serial.read();
+    unsigned long start = millis();
+
+    while ((millis() - start) < 300 && idx < sizeof(buffer)) {
+        while (serial.available() && idx < sizeof(buffer)) {
+            buffer[idx++] = serial.read();
+        }
     }
-    
-    // Update BMS data if we got a response; validation happens inside updateFromBuffer
+
+    #if DEBUG_MODE
+    Serial.print("BMS RX LEN: ");
+    Serial.println(idx);
+
+    if (idx > 0) {
+        Serial.print("BMS RX HEX: ");
+        for (uint8_t i = 0; i < idx; i++) {
+            if (buffer[i] < 0x10) Serial.print("0");
+            Serial.print(buffer[i], HEX);
+            Serial.print(" ");
+        }
+        Serial.println();
+    } else {
+        Serial.println("BMS RX HEX: <NO DATA>");
+    }
+    #endif
+
+    // Parse if we got a response
     if (idx >= 7) {
         bms.updateFromBuffer(buffer, idx);
+
+        #if DEBUG_MODE
+        BMSData d = bms.getData();
+        Serial.print("PARSED VALID: ");
+        Serial.println(d.dataValid ? "YES" : "NO");
+        Serial.print("VOLTAGE: ");
+        Serial.println(d.totalVoltage, 2);
+        Serial.print("CURRENT: ");
+        Serial.println(d.current, 2);
+        Serial.print("SOC: ");
+        Serial.println(d.socPercent);
+        Serial.println("--------------------------");
+        #endif
     } else {
-        // No response — clear key fields so isBatteryConnected() and display update correctly
-        BMSData& d = bms.getDataRef();
-        d.dataValid = false;
-        d.totalVoltage = 0.0f;
-        d.socPercent = 0;
-        d.current = 0.0f;
+        // Do NOT clear immediately on one missed read.
+        // Keep last good values and only clear after real timeout.
+        if (bms.isTimeout()) {
+            BMSData& d = bms.getDataRef();
+            d.dataValid = false;
+            d.totalVoltage = 0.0f;
+            d.socPercent = 0;
+            d.current = 0.0f;
+        }
+
+        #if DEBUG_MODE
+        Serial.println("BMS PARSE SKIPPED: insufficient data");
+        Serial.println("--------------------------");
+        #endif
     }
 }
+
 
 // ============================================================================
 // Disable Charging MOSFETs at Startup

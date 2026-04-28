@@ -31,7 +31,7 @@ LEDController::~LEDController() {
 void LEDController::begin() {
     DEBUG_PRINTLN("    [LED] Creating NeoPixel object...");
     // Using NEO_KHZ400 for this specific LED strip
-    strip = new Adafruit_NeoPixel(NUM_LEDS, LED_STRIP_PIN, NEO_GRB + NEO_KHZ400);
+strip = new Adafruit_NeoPixel(NUM_LEDS, LED_STRIP_PIN, NEO_GRB + NEO_KHZ800);
     
     DEBUG_PRINTLN("    [LED] strip->begin()...");
     strip->begin();
@@ -279,9 +279,9 @@ void LEDController::patternBatteryStatus() {
 }
 
 void LEDController::patternWarningFlash() {
-    // Fast yellow/orange flash
+    // Fast flash using the currently selected color
     if ((patternStep % 2) == 0) {
-        fill(LED_YELLOW);
+        fill(currentColor);
     } else {
         clear();
     }

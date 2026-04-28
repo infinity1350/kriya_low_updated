@@ -7,12 +7,16 @@
 #include "bms_manager.h"
 #include "battery_manager.h"
 #include "power_manager.h"
+#include "safety_monitor.h"
+
+
 
 // External instances
 extern BMSManager bms1;
 extern BMSManager bms2;
 extern BatteryManager batteryManager;
 extern PowerManager powerManager;
+extern SafetyMonitor safetyMonitor;
 
 // ============================================================================
 // Color Palette - Elegant Minimalistic Theme
@@ -144,7 +148,8 @@ void DisplayManager::update() {
     }
     
     // Draw current screen
-    if (powerManager.isEmergency()) {
+        if (safetyMonitor.isEStopPressed()) {
+
         drawEmergencyScreen();
     } else if (powerManager.isPrecharging()) {
         uint8_t progress = powerManager.getPrechargeProgress();
@@ -176,17 +181,35 @@ void DisplayManager::updateAnimations() {
     BMSData data1 = bms1.getData();
     BMSData data2 = bms2.getData();
 
-    // Zero animation targets when battery is not valid — ensures display reflects disconnection
-    bat1Anim.targetSOC     = data1.dataValid ? data1.socPercent   : 0;
-    bat1Anim.targetVoltage = data1.dataValid ? data1.totalVoltage : 0.0f;
-    bat2Anim.targetSOC     = data2.dataValid ? data2.socPercent   : 0;
-    bat2Anim.targetVoltage = data2.dataValid ? data2.totalVoltage : 0.0f;
+    // Keep last visible values unless the BMS has truly timed out
+    if (data1.dataValid || !bms1.isTimeout()) {
+        bat1Anim.targetSOC = data1.socPercent;
+        bat1Anim.targetVoltage = data1.totalVoltage;
+    } else {
+        bat1Anim.targetSOC = 0;
+        bat1Anim.targetVoltage = 0.0f;
+    }
 
-    // Force card redraw immediately when dataValid changes (connected ↔ disconnected)
+    if (data2.dataValid || !bms2.isTimeout()) {
+        bat2Anim.targetSOC = data2.socPercent;
+        bat2Anim.targetVoltage = data2.totalVoltage;
+    } else {
+        bat2Anim.targetSOC = 0;
+        bat2Anim.targetVoltage = 0.0f;
+    }
+
     static bool lastBat1Valid = false;
     static bool lastBat2Valid = false;
-    if (data1.dataValid != lastBat1Valid) { bat1Anim.needsUpdate = true; lastBat1Valid = data1.dataValid; }
-    if (data2.dataValid != lastBat2Valid) { bat2Anim.needsUpdate = true; lastBat2Valid = data2.dataValid; }
+
+    if (data1.dataValid != lastBat1Valid) {
+        bat1Anim.needsUpdate = true;
+        lastBat1Valid = data1.dataValid;
+    }
+
+    if (data2.dataValid != lastBat2Valid) {
+        bat2Anim.needsUpdate = true;
+        lastBat2Valid = data2.dataValid;
+    }
 
     animateBatteryLevel(bat1Anim, bat1Anim.targetSOC, bat1Anim.targetVoltage);
     animateBatteryLevel(bat2Anim, bat2Anim.targetSOC, bat2Anim.targetVoltage);
@@ -209,6 +232,7 @@ void DisplayManager::animateBatteryLevel(BatteryAnimState& anim, float targetSOC
         anim.needsUpdate = true;
     }
 }
+
 
 // ============================================================================
 // Pre-charge Screen - Minimalistic
@@ -273,12 +297,24 @@ void DisplayManager::drawPrechargeScreen(uint8_t progress) {
 void DisplayManager::drawEmergencyScreen() {
     static unsigned long lastBlink = 0;
     static bool showRed = true;
-    
+    static bool firstDraw = true;
+
     unsigned long now = millis();
-    if (now - lastBlink > 500) {
+
+    if (firstDraw) {
+        showRed = true;
         lastBlink = now;
-        showRed = !showRed;
-        
+        firstDraw = false;
+        needsFullRedraw = true;
+    }
+
+    if ((now - lastBlink >= 500) || needsFullRedraw) {
+        lastBlink = now;
+
+        if (!needsFullRedraw) {
+            showRed = !showRed;
+        }
+
         if (showRed) {
             tft.fillScreen(ACCENT_RED);
             tft.setTextColor(TEXT_PRIMARY);
@@ -286,16 +322,26 @@ void DisplayManager::drawEmergencyScreen() {
             tft.fillScreen(BG_COLOR);
             tft.setTextColor(ACCENT_RED);
         }
-        
+
         tft.setTextSize(3);
-        printCentered("EMERGENCY", 90);
-        printCentered("STOP", 130);
-        
-        tft.setTextSize(1);
+        printCentered("EMERGENCY", 85);
+        printCentered("STOP", 125);
+
+        tft.setTextSize(2);
         tft.setTextColor(showRed ? TEXT_PRIMARY : TEXT_MUTED);
-        printCentered("System Disabled", 190);
+        printCentered("SYSTEM DISABLED", 185);
+
+        needsFullRedraw = false;
+    }
+
+    if (!safetyMonitor.isEStopPressed()) {
+        firstDraw = true;
+        needsFullRedraw = true;
     }
 }
+
+
+
 
 // ============================================================================
 // Main Screen - Elegant Minimalistic Design
@@ -329,18 +375,21 @@ void DisplayManager::drawMainScreen() {
     bool bat1Changed = needsFullRedraw || bat1Anim.needsUpdate;
     bool bat2Changed = needsFullRedraw || bat2Anim.needsUpdate;
     
-    if (bat1Changed) {
-        drawBatteryCard(10, 35, 1, bat1Anim.displayedSOC, data1, activeBat == 1);
-        bat1Anim.needsUpdate = false;
+    // LEFT SIDE = BATTERY 2
+    if (bat2Changed) {
+        drawBatteryCard(10, 35, 2, bat2Anim.displayedSOC, data2, activeBat == 2);
+        bat2Anim.needsUpdate = false;
     }
     
-    if (bat2Changed) {
-        drawBatteryCard(165, 35, 2, bat2Anim.displayedSOC, data2, activeBat == 2);
-        bat2Anim.needsUpdate = false;
+    // RIGHT SIDE = BATTERY 1
+    if (bat1Changed) {
+        drawBatteryCard(165, 35, 1, bat1Anim.displayedSOC, data1, activeBat == 1);
+        bat1Anim.needsUpdate = false;
     }
     
     needsFullRedraw = false;
 }
+
 
 // ============================================================================
 // Battery Card - Elegant Design
