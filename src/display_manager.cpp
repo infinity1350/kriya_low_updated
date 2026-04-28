@@ -68,6 +68,11 @@ DisplayManager::DisplayManager() : tft() {
 }
 
 void DisplayManager::begin() {
+    // Allow the display power rail and controller IC to stabilize before
+    // sending the init sequence. TFT_RST (defined in User_Setup.h) ensures a
+    // proper hardware reset pulse inside tft.init(), but the supply must be
+    // stable first. Without this delay, init can race power-on → white screen.
+    delay(150);
     tft.init();
     tft.setRotation(DISPLAY_ROTATION);
     tft.fillScreen(BG_COLOR);

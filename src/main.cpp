@@ -377,12 +377,6 @@ void setupPeripherals() {
     safetyMonitor.begin();
     DEBUG_PRINTLN("  [PERIPH] Safety monitor OK");
 
-    // TEST: force brake button light ON
-safetyMonitor.setButton1LED(true);
-delay(3000);
-safetyMonitor.setButton1LED(false);
-
-    
     DEBUG_PRINTLN("  [PERIPH] powerManager.begin()...");
     powerManager.begin();
     DEBUG_PRINTLN("  [PERIPH] Power manager OK");
